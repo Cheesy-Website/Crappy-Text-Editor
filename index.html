@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebPad++ (Local Offline Edition)</title>
+    <!-- Reads your local downloaded prism.css stylesheet file -->
+    <link href="prism.css" rel="stylesheet" id="theme-link" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            height: 100vh; display: flex; flex-direction: column;
+            background-color: #272822; overflow: hidden; color: #f8f8f2;
+        }
+        .menu-bar {
+            background-color: #1e1f1c; border-bottom: 1px solid #3e3d32;
+            display: flex; padding: 2px 5px; font-size: 12px; user-select: none;
+        }
+        .menu-item { padding: 5px 10px; cursor: pointer; position: relative; color: #cccccc; }
+        .menu-item:hover { background-color: #272822; color: #ffffff; outline: 1px solid #49483e; }
+        .dropdown {
+            display: none; position: absolute; top: 100%; left: 0;
+            background-color: #1e1f1c; border: 1px solid #49483e;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.5); z-index: 1000; min-width: 150px;
+        }
+        .menu-item:hover .dropdown { display: block; }
+        .dropdown-item { padding: 6px 12px; display: flex; justify-content: space-between; color: #cccccc; }
+        .dropdown-item:hover { background-color: #a6e22e; color: #000000; font-weight: bold; }
+        .shortcut { color: #75715e; font-size: 11px; padding-left: 20px; }
+        
+        /* Startup Welcome Screen Styles */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background-color: #1e1f1c; border: 1px solid #49483e; border-radius: 6px;
+            padding: 25px; width: 400px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); text-align: center;
+        }
+        .modal-box h3 { margin-bottom: 15px; color: #a6e22e; font-size: 18px; }
+        .modal-btn {
+            display: block; width: 100%; padding: 10px; margin: 10px 0;
+            background-color: #34352f; border: 1px solid #49483e; color: #f8f8f2;
+            cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold;
+        }
+        .modal-btn:hover { background-color: #a6e22e; color: #000000; }
+        .modal-divider { margin: 15px 0; color: #75715e; font-size: 11px; text-transform: uppercase; }
+        .select-type {
+            width: 100%; padding: 8px; background-color: #272822; border: 1px solid #49483e;
+            color: #f8f8f2; border-radius: 4px; font-family: inherit; margin-bottom: 10px; outline: none;
+        }
+
+        .tabs-bar {
+            background-color: #1e1f1c; display: flex;
+            border-bottom: 1px solid #3e3d32; padding-top: 4px; overflow-x: auto;
+        }
+        .tab {
+            background: linear-gradient(to bottom, #34352f, #272822);
+            border: 1px solid #49483e; border-bottom: none;
+            padding: 4px 12px; font-size: 12px; display: flex;
+            align-items: center; cursor: pointer; min-width: 80px; max-width: 150px;
+            border-top-left-radius: 3px; border-top-right-radius: 3px; margin-left: 2px; color: #75715e;
+        }
+        .tab.active { background: #272822; border-bottom: 1px solid #272822; margin-bottom: -1px; font-weight: bold; color: #f8f8f2; }
+        .tab-close { margin-left: auto; padding-left: 8px; color: #75715e; font-weight: bold; font-size: 10px; }
+        .tab-close:hover { color: #f92672; }
+        .tab.unsaved::before { content: "●"; color: #f92672; margin-right: 4px; font-size: 10px; }
+        
+        .workspace { flex: 1; position: relative; background: #272822; overflow: hidden; display: flex; }
+        
+        /* THE CONTROLLER CONTAINER */
+        .editor-container { 
+            flex: 1; position: relative; height: 100%; margin-left: 55px; 
+            background: #272822 !important;
+        }
+        
+        /* TWIN LOCK OVERLAYS: Both layers are independent and use identical scrolling metrics */
+        .editor-textarea, .highlight-area {
+            position: absolute !important; top: 0 !important; left: 0 !important; 
+            width: 100% !important; height: 100% !important;
+            margin: 0 !important; padding: 10px !important;
+            box-sizing: border-box !important; 
+            overflow: auto !important; /* Both have real independent native scroll tracks */
+            white-space: pre !important; word-wrap: normal !important;
+        }
+        
+        /* Typography Alignment Mirroring */
+        .editor-textarea, .highlight-area, .highlight-area pre, .highlight-area code,
+        .highlight-area pre[class*="language-"], .highlight-area code[class*="language-"] {
+            font-family: "Consolas", "Courier New", Courier, monospace !important; 
+            font-size: 14px !important; line-height: 22px !important;
+            tab-size: 4 !important; -moz-tab-size: 4 !important;
+            letter-spacing: normal !important; word-spacing: normal !important;
+            text-transform: none !important; text-shadow: none !important;
+            box-shadow: none !important; border: none !important;
+        }
+        
+        /* Textarea layer handles mouse text selection and transparent characters */
+        .editor-textarea { 
+            background: transparent !important; color: transparent !important; 
+            caret-color: #f8f8f2 !important; resize: none !important; outline: none !important; z-index: 2; 
+        }
+        
+        /* Strip Prism element wrappers from adding competing boxes */
+        .highlight-area { z-index: 1; pointer-events: none; background: transparent !important; }
+        .highlight-area pre { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; overflow: visible !important; border: none !important; }
+        .highlight-area code { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; color: #f8f8f2; border: none !important; }
+        
+        /* Hide scrollbars from highlight-area so they never overlap the textarea scrollbars */
+        .highlight-area::-webkit-scrollbar { display: none; }
+        .highlight-area { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .line-numbers {
+            position: absolute; top: 0; left: 0; width: 55px; height: 100%;
+            background-color: #1e1f1c; border-right: 1px solid #3e3d32; padding: 10px 0;
+            font-family: "Consolas", monospace; font-size: 14px; line-height: 22px;
+            color: #75715e; text-align: right; padding-right: 10px; user-select: none; z-index: 3; overflow: hidden; box-sizing: border-box;
+        }
+        .status-bar {
+            background-color: #272822; border-top: 1px solid #3e3d32;
+            padding: 2px 10px; font-size: 11px; color: #75715e;
+            display: flex; justify-content: flex-end; gap: 20px; user-select: none;
+        }
+    </style>
+
+</head>
+<body>
+    <!-- Startup Welcome Modal Dialog Box -->
+    <div class="modal-overlay" id="start-modal">
+        <div class="modal-box">
+            <h3>WebPad++ Setup</h3>
+            <button class="modal-btn" onclick="modalOpenAction()">📁 Open Existing File...</button>
+            <div class="modal-divider">or create new</div>
+            <select class="select-type" id="modal-lang-select">
+                <option value="txt">Plain Text (.txt)</option>
+                <option value="html">HTML File (.html)</option>
+                <option value="css">CSS Stylesheet (.css)</option>
+                <option value="js">JavaScript (.js)</option>
+                <option value="json">JSON File (.json)</option>
+                <option value="python">Python Script (.py)</option>
+            </select>
+            <button class="modal-btn" onclick="modalCreateAction()">📄 Create New File</button>
+        </div>
+    </div>
+
+    <!-- Floating Replace-Only Panel HTML Component -->
+    <div class="find-replace-panel" id="fr-panel">
+        <div class="fr-row">
+            <span style="font-size:12px; font-weight:bold; color:#a6e22e;">Replace Text</span>
+            <span class="fr-close" onclick="toggleReplacePanel(false)">×</span>
+        </div>
+        <div class="fr-row">
+            <label>Change word:</label>
+            <input type="text" class="fr-input" id="fr-find-text" placeholder="Word to look for...">
+        </div>
+        <div class="fr-row">
+            <label>Replace with:</label>
+            <input type="text" class="fr-input" id="fr-replace-text" placeholder="New text...">
+        </div>
+        <div class="fr-btn-group">
+            <button class="fr-btn" onclick="executeReplace()">Replace Next</button>
+            <button class="fr-btn" onclick="executeReplaceAll()">Replace All</button>
+        </div>
+    </div>
+
+    <div class="menu-bar">
+        <div class="menu-item">
+            File
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="newFile()">New <span class="shortcut">Ctrl+N</span></div>
+                <div class="dropdown-item" onclick="openFile()">Open... <span class="shortcut">Ctrl+O</span></div>
+                <div class="dropdown-item" onclick="saveFile()">Save <span class="shortcut">Ctrl+S</span></div>
+                <div class="dropdown-item" onclick="saveFileAs()">Save As... <span class="shortcut">Ctrl+Alt+S</span></div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Language
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="setLanguage('txt')">Plain Text</div>
+                <div class="dropdown-item" onclick="setLanguage('html')">HTML</div>
+                <div class="dropdown-item" onclick="setLanguage('css')">CSS</div>
+                <div class="dropdown-item" onclick="setLanguage('js')">JavaScript</div>
+                <div class="dropdown-item" onclick="setLanguage('json')">JSON</div>
+                <div class="dropdown-item" onclick="setLanguage('python')">Python</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs-bar" id="tabs-bar"></div>
+    <div class="workspace">
+        <div class="line-numbers" id="line-numbers">1</div>
+        <div class="editor-container">
+            <!-- Code text layer box wrapper -->
+            <pre class="highlight-area" id="highlight-wrapper"><code id="highlight-code"></code></pre>
+            <textarea class="editor-textarea" id="editor" spellcheck="false" autocomplete="off"></textarea>
+        </div>
+    </div>
+    <div class="status-bar">
+        <span id="status-lang">Language: Plain Text</span>
+        <span id="status-pos">Ln 1, Col 1</span>
+    </div>
+
+    <script src="prism.js"></script>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const highlightCode = document.getElementById('highlight-code');
+        const highlightWrapper = document.getElementById('highlight-wrapper');
+        const lineNumbers = document.getElementById('line-numbers');
+        const tabsBar = document.getElementById('tabs-bar');
+        const statusPos = document.getElementById('status-pos');
+        const statusLang = document.getElementById('status-lang');
+        let tabs = [], activeTabId = null, tabCounter = 0;
+
+        function init() { setupEventListeners(); }
+        function modalOpenAction() { document.getElementById('start-modal').style.display = 'none'; openFile(); }
+        function modalCreateAction() {
+            const selectedLang = document.getElementById('modal-lang-select').value;
+            document.getElementById('start-modal').style.display = 'none'; newFile(selectedLang);
+        }
+        function newFile(customLang = 'txt') {
+            tabCounter++;
+            const extMap = { txt: 'txt', html: 'html', css: 'css', js: 'js', json: 'json', python: 'py' };
+            const matchedExt = extMap[customLang] || 'txt';
+            const newTab = { id: tabCounter, name: `new ${tabCounter}.${matchedExt}`, content: '', fileHandle: null, isUnsaved: false, lang: customLang };
+            tabs.push(newTab); renderTabs(); switchTab(newTab.id); setLanguage(customLang, false);
+        }
+        function renderTabs() {
+            tabsBar.innerHTML = '';
+            tabs.forEach(tab => {
+                const tabEl = document.createElement('div');
+                tabEl.className = `tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isUnsaved ? 'unsaved' : ''}`;
+                tabEl.innerHTML = `<span>${tab.name}</span><span class="tab-close" onclick="closeTab(${tab.id}, event)">×</span>`;
+                tabEl.addEventListener('click', () => switchTab(tab.id)); tabsBar.appendChild(tabEl);
+            });
+        }
+        function switchTab(id) {
+            if (activeTabId !== null) { const currentTab = tabs.find(t => t.id === activeTabId); if (currentTab) currentTab.content = editor.value; }
+            activeTabId = id; const activeTab = tabs.find(t => t.id === activeTabId);
+            editor.value = activeTab.content; setLanguage(activeTab.lang, false); renderTabs(); updateEditor();
+        }
+        function closeTab(id, event) {
+            event.stopPropagation(); const tabIndex = tabs.findIndex(t => t.id === id);
+            if (tabs[tabIndex].isUnsaved && !confirm("Discard unsaved changes?")) return; tabs.splice(tabIndex, 1);
+            if (tabs.length === 0) document.getElementById('start-modal').style.display = 'flex';
+            else if (activeTabId === id) switchTab(tabs[tabIndex === 0 ? 0 : tabIndex - 1].id); else renderTabs();
+        }
+        async function openFile() {
+            try {
+                if (!window.showOpenFilePicker) { alert("File system access blocked."); return; }
+                const [handle] = await window.showOpenFilePicker(); const file = await handle.getFile(), text = await file.text();
+                const ext = file.name.split('.').pop().toLowerCase();
+                let lang = ['html', 'css', 'json'].includes(ext) ? ext : (ext === 'js' ? 'javascript' : (ext === 'py' ? 'python' : 'txt'));
+                tabCounter++; const openedTab = { id: tabCounter, name: file.name, content: text, fileHandle: handle, isUnsaved: false, lang: lang };
+                tabs.push(openedTab); switchTab(openedTab.id); setLanguage(lang, false);
+            } catch (err) { console.log(err); if(tabs.length === 0) document.getElementById('start-modal').style.display = 'flex'; }
+        }
+
+        async function saveFile() {
+            const activeTab = tabs.find(t => t.id === activeTabId); if (!activeTab) return;
+            if (activeTab.fileHandle) {
+                try {
+                    const writable = await activeTab.fileHandle.createWritable(); await writable.write(editor.value); await writable.close();
+                    activeTab.isUnsaved = false; activeTab.content = editor.value; renderTabs();
+                } catch (err) { alert("Failed to overwrite: " + err.message); }
+            } else { saveFileAs(); }
+        }
+        async function saveFileAs() {
+            const activeTab = tabs.find(t => t.id === activeTabId); if (!activeTab) return;
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({ suggestedName: activeTab.name }); const writable = await handle.createWritable();
+                    await writable.write(editor.value); await writable.close();
+                    activeTab.fileHandle = handle; activeTab.name = handle.name; activeTab.isUnsaved = false; activeTab.content = editor.value; renderTabs();
+                } else {
+                    const blob = new Blob([editor.value], { type: "text/plain;charset=utf-8" });
+                    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = activeTab.name; a.click();
+                }
+            } catch (err) { console.log(err); }
+        }
+        function setLanguage(lang, markAsChanged = true) {
+            const activeTab = tabs.find(t => t.id === activeTabId); if (!activeTab) return; activeTab.lang = lang;
+            let prismLang = lang === 'js' ? 'javascript' : (lang === 'python' ? 'python' : lang);
+            highlightCode.className = `language-${prismLang}`; statusLang.innerText = `Language: ${lang.toUpperCase()}`;
+            if (markAsChanged && !activeTab.isUnsaved) { activeTab.isUnsaved = true; renderTabs(); } updateEditor();
+        }
+        function updateEditor() {
+            let text = editor.value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); if (text.endsWith("\n") || text === "") text += " ";
+            highlightCode.innerHTML = text; if (window.Prism) { Prism.highlightElement(highlightCode); }
+            const lines = editor.value.split('\n').length; let numHTML = ''; for (let i = 1; i <= lines; i++) numHTML += i + '<br>'; lineNumbers.innerHTML = numHTML;
+            syncScroll();
+        }
+        function syncScroll() { highlightWrapper.scrollTop = editor.scrollTop; highlightWrapper.scrollLeft = editor.scrollLeft; lineNumbers.scrollTop = editor.scrollTop; }
+        function updateStatusBar() { const lines = editor.value.substring(0, editor.selectionStart).split("\n"); statusPos.innerText = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`; }
+        
+        let lastSearchPos = 0;
+        function toggleReplacePanel(show) { const panel = document.getElementById('fr-panel'); panel.style.display = show ? 'block' : 'none'; if (show) { document.getElementById('fr-find-text').focus(); lastSearchPos = 0; } }
+        function executeReplace() {
+            const searchStr = document.getElementById('fr-find-text').value; if (!searchStr) return;
+            const replaceStr = document.getElementById('fr-replace-text').value; const text = editor.value; const start = editor.selectionStart, end = editor.selectionEnd;
+            if (start !== end && text.substring(start, end).toLowerCase() === searchStr.toLowerCase()) {
+                editor.value = text.substring(0, start) + replaceStr + text.substring(end); editor.setSelectionRange(start, start + replaceStr.length); lastSearchPos = start + replaceStr.length; updateEditor(); return;
+            }
+            let index = text.toLowerCase().indexOf(searchStr.toLowerCase(), lastSearchPos); if (index === -1) { index = text.toLowerCase().indexOf(searchStr.toLowerCase(), 0); }
+            if (index !== -1) { editor.focus(); editor.setSelectionRange(index, index + searchStr.length); lastSearchPos = index + searchStr.length; editor.scrollTop = (text.substring(0, index).split('\n').length - 5) * 22; }
+            else { alert("No match found."); }
+        }
+        function executeReplaceAll() {
+            const searchStr = document.getElementById('fr-find-text').value; if (!searchStr) return; const replaceStr = document.getElementById('fr-replace-text').value;
+            const regex = new RegExp(searchStr.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); editor.value = editor.value.replace(regex, replaceStr); updateEditor();
+        }
+        function handleAutoClose(e) {
+            if (e.key === '>') {
+                const pos = editor.selectionStart; const text = editor.value; const lastOpenTag = text.substring(0, pos).lastIndexOf('<');
+                if (lastOpenTag !== -1 && lastOpenTag > text.substring(0, pos).lastIndexOf('>')) {
+                    const tagContent = text.substring(lastOpenTag + 1, pos).trim().split(' ')[0];
+                    if (tagContent && !tagContent.startsWith('/') && !tagContent.endsWith('/')) {
+                        e.preventDefault(); editor.value = text.substring(0, pos) + `></${tagContent}>` + text.substring(pos); editor.selectionStart = editor.selectionEnd = pos + 1; updateEditor();
+                    }
+                }
+            }
+        }
+        function setupEventListeners() {
+            editor.addEventListener('input', () => { const activeTab = tabs.find(t => t.id === activeTabId); if (activeTab && !activeTab.isUnsaved) { activeTab.isUnsaved = true; renderTabs(); } updateEditor(); });
+            editor.addEventListener('scroll', syncScroll);
+            editor.addEventListener('keydown', (e) => { handleAutoClose(e); if (e.key === 'Tab') { e.preventDefault(); const s = editor.selectionStart, eEnd = editor.selectionEnd; editor.value = editor.value.substring(0, s) + "\t" + editor.value.substring(eEnd); editor.selectionStart = editor.selectionEnd = s + 1; updateEditor(); } });
+            ['click', 'keyup', 'focus'].forEach(evt => editor.addEventListener(evt, updateStatusBar));
+            window.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); toggleReplacePanel(true); } if (e.key === 'Escape') { toggleReplacePanel(false); }
+                if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.altKey) saveFileAs(); else saveFile(); }
+                if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); } if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newFile(); }
+            });
+        }
+        init();
+    </script>
+</body>
+</html>
+
+
+
