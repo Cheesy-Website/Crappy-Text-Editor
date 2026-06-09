@@ -124,7 +124,16 @@
             display: flex; justify-content: flex-end; gap: 20px; user-select: none;
         }
     </style>
-
+<script>if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((registration) => {
+      console.log('Service Worker registered: ', registration);
+    }).catch((registrationError) => {
+      console.log('Service Worker registration failed: ', registrationError);
+    });
+  });
+}
+</script>
 </head>
 <body>
     <!-- Startup Welcome Modal Dialog Box -->
