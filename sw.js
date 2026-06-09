@@ -2,9 +2,8 @@ const CACHE_NAME = 'my-offline-cache-v1';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/styles.css',
-  '/script.js',
-  '/images/logo.png'
+  '/prism.css',
+  '/prism.js'
 ];
 
 // Install the Service Worker and cache files
